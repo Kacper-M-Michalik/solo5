@@ -63,6 +63,11 @@ static inline uint64_t cpu_cntvct(void)
     return val;
 }
 
+static inline void cpu_pause(void)
+{
+    __asm__ __volatile__("ISB SY");
+}
+
 static inline uint64_t mul64_32(uint64_t a, uint32_t b, uint8_t s)
 {
     return (a * b) >> s;

@@ -177,6 +177,11 @@ static inline uint64_t cpu_rdtsc(void)
     return ((uint64_t)h << 32) | l;
 }
 
+static inline void cpu_pause(void)
+{
+    __asm__ __volatile__("pause");
+}
+
 static inline uint64_t mul64_32(uint64_t a, uint32_t b, uint8_t s)
 {
     uint64_t prod;

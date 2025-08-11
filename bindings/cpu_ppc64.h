@@ -46,6 +46,12 @@ static inline uint64_t cpu_cntvct(void)
     return val;
 }
 
+// Based on: https://stackoverflow.com/questions/5425506/equivalent-of-x86-pause-instruction-for-ppc
+static inline void cpu_pause(void)
+{
+    __asm__ __volatile__("or 31,31,31");
+}
+
 static inline void cpu_set_tls_base(uint64_t base)
 {
     __asm__ __volatile(
