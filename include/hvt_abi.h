@@ -26,6 +26,8 @@
  *
  * This header file is dual-use; tender code will define HVT_HOST when
  * including it.
+ * 
+ * Binding code can define USE_HYPERCALL_INSTRUCTION to use hvc/vmcall based hypercalls instead of MMIO / I/O-port based hypercalls.
  */
 
 #ifndef HVT_ABI_H
@@ -41,25 +43,47 @@
  * in this file.
  */
 
-#define HVT_ABI_VERSION 2
+#define HVT_ABI_VERSION 3
 
 /*
  * Lowest virtual address at which guests can be loaded.
  */
 #define HVT_GUEST_MIN_BASE 0x100000
 
-#ifdef __x86_64__
+
+#if defined(__x86_64__) && defined(USE_HYPERCALL_INSTRUCTION)
+/*
+ * Bindings only.
+ */
+#    ifndef HVT_HOST
+static inline void hvt_do_hypercall(int n, volatile void *arg)
+{
+#    ifdef assert
+    assert(((uint64_t)arg <= UINT32_MAX));
+#    endif
+
+    /* Store hypercall ID in rax */
+    /* Arg pointer in rbx */
+    register uint64_t rax __asm__("rax") = n;
+    register void* rbx __asm__("rbx") = arg;
+
+    __asm__ __volatile__(
+            "mfence\n\t"
+            "vmcall\n\t"
+            "mfence\n\t"
+            : "+r"(rax)
+            : "r"(rbx)
+            : "rcx", "rdx", "rsi", "rdi", "memory");
+}
+#    endif
+
+#elif defined(__x86_64__)
 /*
  * PIO base address used to dispatch hypercalls.
  */
 #define HVT_HYPERCALL_PIO_BASE 0x500
 
-#    ifdef HVT_HOST
-/*
- * Non-dereferencable tender-side type representing a guest physical address.
- */
-typedef uint64_t hvt_gpa_t;
-#    else
+#    ifndef HVT_HOST
 /*
  * On x86, 32-bit PIO is used as the hypercall mechanism. This only supports
  * sending 32-bit pointers; raise an assertion if a bigger pointer is used.
@@ -77,6 +101,33 @@ static inline void hvt_do_hypercall(int n, volatile void *arg)
             : "a" ((uint32_t)((uint64_t)arg)),
               "d" ((uint16_t)(HVT_HYPERCALL_PIO_BASE + n))
             : "memory");
+}
+#    endif
+
+#elif defined(__aarch64__) && defined(USE_HYPERCALL_INSTRUCTION)
+/*
+ * Bindings only.
+ */
+#    ifndef HVT_HOST
+static inline void hvt_do_hypercall(int n, volatile void* arg)
+{
+#    ifdef assert
+    assert(((uint64_t)arg <= UINT32_MAX));
+#    endif
+
+    /* Store hypercall ID in x0, as hypercall immediate is more work to extract than just reading x0 */
+    /* Arg pointer in x1 */
+    register uint64_t x0 __asm__("x0") = (uint64_t)n;
+    register void* x1 __asm__("x1") = arg;
+
+    /* Memory barrier required before and after hypercall so that writes by us are visible to hypervisor, and writes by hypervisor are visible to us */
+    __asm__ __volatile__(
+            "dsb sy\n\t"
+            "hvc #0\n\t"
+            "dsb sy\n\t"
+            : "+r"(x0)
+            : "r"(x1)
+            : "x2", "x3", "x4", "x5", "x6", "x7", "memory", "cc");
 }
 #    endif
 
@@ -101,12 +152,7 @@ static inline void hvt_do_hypercall(int n, volatile void *arg)
 #define HVT_HYPERCALL_ADDRESS(x)   (HVT_HYPERCALL_MMIO_BASE + ((x) << 3))
 #define HVT_HYPERCALL_NR(x)        (((x) - HVT_HYPERCALL_MMIO_BASE) >> 3)
 
-#    ifdef HVT_HOST
-/*
- * Non-dereferencable tender-side type representing a guest physical address.
- */
-typedef uint64_t hvt_gpa_t;
-#    else
+#    ifndef HVT_HOST
 /*
  * In order to keep consistency with x86_64, we limit this hypercall only
  * to support sending 32-bit pointers; raise an assertion if a bigger
@@ -120,13 +166,14 @@ static inline void hvt_do_hypercall(int n, volatile void *arg)
 #    ifdef assert
     assert(((uint64_t)arg <= UINT32_MAX));
 #    endif
-        __asm__ __volatile__("str %w0, [%1]"
-                :
-                : "rZ" ((uint32_t)((uint64_t)arg)),
-                  "r" ((uint64_t)HVT_HYPERCALL_ADDRESS(n))
-                : "memory");
+    __asm__ __volatile__("str %w0, [%1]"
+            :
+            : "rZ" ((uint32_t)((uint64_t)arg)),
+                "r" ((uint64_t)HVT_HYPERCALL_ADDRESS(n))
+            : "memory");
 }
 #    endif
+
 #else
 #    error Unsupported architecture
 #endif
@@ -134,17 +181,26 @@ static inline void hvt_do_hypercall(int n, volatile void *arg)
 /*
  * Guest-provided pointers in all structures shared between the guest and
  * tender MUST be declared with HVT_GUEST_PTR(type), where type is the
- * desired guest-side pointer type. hvt_gpa_t (defined earlier) will be used
+ * desired guest-side pointer type. hvt_gpa_t will be used
  * as the tender-side type.
  *
  * This ensures that these pointers are not directly dereferencable on the
  * tender side.
  */
 #ifdef HVT_HOST
+    /*
+    * Non-dereferencable tender-side type representing a guest physical address.
+    */
+    typedef uint64_t hvt_gpa_t;
 #    define HVT_GUEST_PTR(T) hvt_gpa_t
 #else
 #    define HVT_GUEST_PTR(T) T
 #endif
+
+/*
+ * Maximum size of guest command line, including the string terminator.
+ */
+#define HVT_CMDLINE_SIZE 8192
 
 /*
  * A pointer to this structure is passed by the tender as the sole argument to
@@ -157,11 +213,6 @@ struct hvt_boot_info {
     HVT_GUEST_PTR(const char *) cmdline;/* Address of command line (C string) */
     HVT_GUEST_PTR(const void *) mft;    /* Address of application manifest */
 };
-
-/*
- * Maximum size of guest command line, including the string terminator.
- */
-#define HVT_CMDLINE_SIZE 8192
 
 /*
  * Canonical list of hypercalls supported by all tender modules. Actual calls
@@ -276,5 +327,57 @@ struct hvt_hc_halt {
     /* IN */
     int exit_status;
 };
+
+
+/* Asserts to verify ABI is consitent between compilations */
+
+_Static_assert(sizeof(struct hvt_boot_info) == 40, "hvt_boot_info - Size mismatch");
+_Static_assert(offsetof(struct hvt_boot_info, mem_size) == 0, "hvt_boot_info - Offset mismatch");
+_Static_assert(offsetof(struct hvt_boot_info, kernel_end) == 8, "hvt_boot_info - Offset mismatch");
+_Static_assert(offsetof(struct hvt_boot_info, cpu_cycle_freq) == 16, "hvt_boot_info - Offset mismatch");
+_Static_assert(offsetof(struct hvt_boot_info, cmdline) == 24, "hvt_boot_info - Offset mismatch");
+_Static_assert(offsetof(struct hvt_boot_info, mft) == 32, "hvt_boot_info - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_walltime) == 8, "hvt_hc_walltime - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_walltime, nsecs) == 0, "hvt_hc_walltime - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_puts) == 16, "hvt_hc_puts - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_puts, data) == 0, "hvt_hc_puts - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_puts, len) == 8, "hvt_hc_puts - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_block_write) == 40, "hvt_hc_block_write - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_write, handle) == 0, "hvt_hc_block_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_write, offset) == 8, "hvt_hc_block_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_write, data) == 16, "hvt_hc_block_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_write, len) == 24, "hvt_hc_block_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_write, ret) == 32, "hvt_hc_block_write - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_block_read) == 40, "hvt_hc_block_read - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_read, handle) == 0, "hvt_hc_block_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_read, offset) == 8, "hvt_hc_block_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_read, data) == 16, "hvt_hc_block_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_read, len) == 24, "hvt_hc_block_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_block_read, ret) == 32, "hvt_hc_block_read - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_net_write) == 32, "hvt_hc_net_write - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_write, handle) == 0, "hvt_hc_net_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_write, data) == 8, "hvt_hc_net_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_write, len) == 16, "hvt_hc_net_write - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_write, ret) == 24, "hvt_hc_net_write - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_net_read) == 32, "hvt_hc_net_read - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_read, handle) == 0, "hvt_hc_net_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_read, data) == 8, "hvt_hc_net_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_read, len) == 16, "hvt_hc_net_read - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_net_read, ret) == 24, "hvt_hc_net_read - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_poll) == 24, "hvt_hc_poll - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_poll, timeout_nsecs) == 0, "hvt_hc_poll - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_poll, ready_set) == 8, "hvt_hc_poll - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_poll, ret) == 16, "hvt_hc_poll - Offset mismatch");
+
+_Static_assert(sizeof(struct hvt_hc_halt) == 16, "hvt_hc_halt - Size mismatch");
+_Static_assert(offsetof(struct hvt_hc_halt, cookie) == 0, "hvt_hc_halt - Offset mismatch");
+_Static_assert(offsetof(struct hvt_hc_halt, exit_status) == 8, "hvt_hc_halt - Offset mismatch");
 
 #endif /* HVT_ABI_H */

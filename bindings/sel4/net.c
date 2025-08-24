@@ -2,25 +2,55 @@
 
 static const struct mft *mft;
 
-void net_init(struct sel4_boot_info *bi)
+solo5_result_t solo5_net_write(solo5_handle_t handle, const uint8_t *buf,
+        size_t size)
 {
-    //mft = bi->mft;
-}
+    volatile struct hvt_hc_net_write wr;
 
-solo5_result_t solo5_net_acquire(const char *name, solo5_handle_t *handle,
-        struct solo5_net_info *info)
-{
-    return SOLO5_R_EUNSPEC;
+    wr.handle = handle;
+    wr.data = buf;
+    wr.len = size;
+    wr.ret = 0;
+
+    sel4_do_hypercall(HVT_HYPERCALL_NET_WRITE, &wr);
+
+    return wr.ret;
 }
 
 solo5_result_t solo5_net_read(solo5_handle_t handle, uint8_t *buf, size_t size,
         size_t *read_size)
 {
-    return SOLO5_R_EUNSPEC;
+    volatile struct hvt_hc_net_read rd;
+
+    rd.handle = handle;
+    rd.data = buf;
+    rd.len = size;
+    rd.ret = 0;
+
+    sel4_do_hypercall(HVT_HYPERCALL_NET_READ, &rd);
+
+    *read_size = rd.len;
+    return rd.ret;
 }
 
-solo5_result_t solo5_net_write(solo5_handle_t handle, const uint8_t *buf,
-        size_t size)
+solo5_result_t solo5_net_acquire(const char *name, solo5_handle_t *handle,
+        struct solo5_net_info *info)
 {
-    return SOLO5_R_EUNSPEC;
+    unsigned index;
+    const struct mft_entry *e =
+        mft_get_by_name(mft, name, MFT_DEV_NET_BASIC, &index);
+    if (e == NULL)
+        return SOLO5_R_EINVAL;
+    assert(e->attached);
+
+    *handle = index;
+    info->mtu = e->u.net_basic.mtu;
+    memcpy(info->mac_address, e->u.net_basic.mac,
+            sizeof info->mac_address);
+    return SOLO5_R_OK;
+}
+
+void net_init(const struct hvt_boot_info *bi)
+{
+    mft = bi->mft;
 }

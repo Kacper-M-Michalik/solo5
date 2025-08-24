@@ -2,9 +2,7 @@
 #include "../crt_init.h"
 #include "version.h"
 
-//Require crt.c, cmdline.c, tls.c, abort.c, exit.c, mem.c, log.c, printf.c,
-
-void _start(void *arg)
+void _start(const void *arg)
 {
     crt_init_ssp();
     crt_init_tls();
@@ -12,6 +10,7 @@ void _start(void *arg)
     static struct solo5_start_info si;
 
     console_init();
+    cpu_init();
     platform_init(arg);
     si.cmdline = cmdline_parse(platform_cmdline());
 
@@ -22,7 +21,7 @@ void _start(void *arg)
     log(INFO, "Solo5: Bindings version %s\n", SOLO5_VERSION);
 
     mem_init();
-    time_init();
+    time_init(arg);
     block_init(arg);
     net_init(arg);
 
@@ -38,6 +37,7 @@ DECLARE_ELF_INTERP
 
 /*
  * The "ABI1" Solo5 ELF note is declared in this module.
+ *
  */
 ABI1_NOTE_DECLARE_BEGIN
 {
@@ -50,5 +50,3 @@ ABI1_NOTE_DECLARE_END
  * Pretend that we are an OpenBSD executable. See elf_abi.h for details.
  */
 DECLARE_OPENBSD_NOTE
-
-

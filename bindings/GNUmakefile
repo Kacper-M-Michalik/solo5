@@ -60,6 +60,10 @@ muen_SRCS := muen/start.c $(common_SRCS) $(common_hvt_SRCS) \
     muen/muen-clock.c muen/muen-console.c muen/muen-net.c \
     muen/muen-platform_lifecycle.c muen/muen-yield.c muen/muen-sinfo.c
 
+sel4_SRCS := sel4/start.c $(common_SRCS) sel4/platform.c sel4/platform_intr.c sel4/time.c \
+    sel4/platform_lifecycle.c sel4/yield.c sel4/tscclock.c sel4/console.c \
+    sel4/net.c sel4/block.c
+
 xen_SRCS := xen/boot.S xen/start.c $(common_SRCS) \
     xen/hypercall_page.S xen/console.c xen/platform.c xen/platform_intr.c \
     xen/evtchn.c xen/time.c xen/pvclock.c xen/stubs.c
@@ -156,6 +160,17 @@ solo5_muen.o: $(muen_OBJS)
     all_TARGETS += solo5_muen.o
     all_OBJS += $(muen_OBJS)
     all_SRCS += $(muen_SRCS)
+endif
+
+ifdef CONFIG_SEL4
+    sel4_OBJS := $(patsubst %.c,%.o,$(patsubst %.S,%.o,$(sel4_SRCS)))
+
+solo5_muen.o: $(sel4_OBJS)
+	$(LINK.bindings)
+
+    all_TARGETS += solo5_sel4.o
+    all_OBJS += $(sel4_OBJS)
+    all_SRCS += $(sel4_SRCS)
 endif
 
 ifdef CONFIG_XEN

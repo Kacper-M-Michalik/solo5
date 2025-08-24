@@ -113,7 +113,7 @@ install-tools: build
 	    $(D)/bin/solo5-virtio-run
 
 PUBLIC_HEADERS := include/elf_abi.h include/hvt_abi.h include/mft_abi.h \
-    include/spt_abi.h include/solo5.h
+    include/spt_abi.h include/sel4_abi.h include/solo5.h
 
 .PHONY: install-headers
 install-headers: MAKECMDGOALS :=
@@ -155,6 +155,10 @@ endif
 ifdef CONFIG_MUEN
 	$(INSTALL) -m 0644 bindings/solo5_muen.o $(TOOLCHAIN_LIBDIR)
 	$(INSTALL) -m 0644 bindings/solo5_muen.lds $(TOOLCHAIN_LIBDIR)
+endif
+ifdef CONFIG_SEL4
+	$(INSTALL) -m 0644 bindings/solo5_sel4.o $(TOOLCHAIN_LIBDIR)
+	$(INSTALL) -m 0644 bindings/solo5_hvt.lds $(TOOLCHAIN_LIBDIR)
 endif
 ifdef CONFIG_XEN
 	$(INSTALL) -m 0644 bindings/solo5_xen.o $(TOOLCHAIN_LIBDIR)

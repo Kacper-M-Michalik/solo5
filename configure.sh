@@ -395,7 +395,7 @@ else
 fi
 TARGET_CC_MACHINE=$(${TARGET_CC} -dumpmachine)
 
-CONFIG_HVT= CONFIG_SPT= CONFIG_VIRTIO= CONFIG_MUEN= CONFIG_XEN=
+CONFIG_HVT= CONFIG_SPT= CONFIG_VIRTIO= CONFIG_MUEN= CONFIG_SEL4= CONFIG_XEN=
 case ${TARGET_CC_MACHINE} in
     x86_64-*|amd64-*)
         TARGET_ARCH=x86_64
@@ -403,13 +403,13 @@ case ${TARGET_CC_MACHINE} in
         if [ "${CONFIG_HOST}" = "OpenBSD" ]; then
             CONFIG_HVT=1
         else
-            CONFIG_HVT=1 CONFIG_SPT=1 CONFIG_VIRTIO=1 CONFIG_MUEN=1 CONFIG_XEN=1
+            CONFIG_HVT=1 CONFIG_SPT=1 CONFIG_VIRTIO=1 CONFIG_MUEN=1 CONFIG_SEL4=1 CONFIG_XEN=1
         fi
         ;;
     aarch64-*)
         TARGET_ARCH=aarch64
         TARGET_LD_MAX_PAGE_SIZE=0x1000
-        CONFIG_HVT=1 CONFIG_SPT=1
+        CONFIG_HVT=1 CONFIG_SPT=1 CONFIG_SEL4=1
         ;;
     powerpc64le-*|ppc64le-*)
         TARGET_ARCH=ppc64le
@@ -525,6 +525,7 @@ echo -n "${prog_NAME}: Enabled bindings: stub"
 [ -n "${CONFIG_SPT}" ]    && echo -n " spt"
 [ -n "${CONFIG_VIRTIO}" ] && echo -n " virtio"
 [ -n "${CONFIG_MUEN}" ]   && echo -n " muen"
+[ -n "${CONFIG_SEL4}" ]   && echo -n " sel4"
 [ -n "${CONFIG_XEN}" ]    && echo -n " xen"
 echo "."
 echo -n "${prog_NAME}: Enabled tenders:"
@@ -552,6 +553,7 @@ CONFIG_SPT_TENDER_LIBSECCOMP_CFLAGS=${CONFIG_SPT_TENDER_LIBSECCOMP_CFLAGS}
 CONFIG_SPT_TENDER_LIBSECCOMP_LDLIBS=${CONFIG_SPT_TENDER_LIBSECCOMP_LDLIBS}
 CONFIG_VIRTIO=${CONFIG_VIRTIO}
 CONFIG_MUEN=${CONFIG_MUEN}
+CONFIG_SEL4=${CONFIG_SEL4}
 CONFIG_XEN=${CONFIG_XEN}
 CONFIG_TARGET_ARCH=${TARGET_ARCH}
 CONFIG_TARGET_TRIPLE=${TARGET_TRIPLE}

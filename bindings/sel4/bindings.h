@@ -4,10 +4,17 @@
 #include "../bindings.h"
 #include "sel4_abi.h"
 
-void time_init(void);
+void time_init(const struct hvt_boot_info *bi);
 void console_init(void);
-void block_init(struct sel4_boot_info *arg);
-void net_init(struct sel4_boot_info *arg);
+void net_init(const struct hvt_boot_info *bi);
+void block_init(const struct hvt_boot_info *bi);
+
+/* tscclock.c: TSC-based clock */
+uint64_t tscclock_monotonic(void);
+int tscclock_init(uint64_t tsc_freq);
+uint64_t tscclock_epochoffset(void);
+
+void process_bootinfo(const void *arg);
 
 #endif /* __SEL4_BINDINGS_H__ */
 
@@ -31,7 +38,7 @@ void net_init(struct sel4_boot_info *arg);
 
 /* solo5_clock_wall is in sel4/time.c */
 
-/* solo5_yield is in sel4/time.c */
+/* solo5_yield is in sel4/yield.c */
 
 /* solo5_console_write is in sel4/console.c */
 
