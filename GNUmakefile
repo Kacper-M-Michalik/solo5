@@ -113,7 +113,7 @@ install-tools: build
 	    $(D)/bin/solo5-virtio-run
 
 PUBLIC_HEADERS := include/elf_abi.h include/hvt_abi.h include/mft_abi.h \
-    include/spt_abi.h include/sel4_abi.h include/solo5.h
+    include/spt_abi.h include/solo5.h
 
 .PHONY: install-headers
 install-headers: MAKECMDGOALS :=
